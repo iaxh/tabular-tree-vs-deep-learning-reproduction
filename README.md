@@ -69,6 +69,67 @@ early stopping; the original paper uses a large random search on GPUs, so
 absolute accuracy is lower, but the relative ranking and the qualitative effects
 match the paper.
 
+## Cross-dataset validation extension
+
+The cross-dataset extension tests whether the response to irrelevant Gaussian
+features is stable on two additional processed datasets from the paper's OpenML
+suite: `eye_movements` (data id 44130) and `pol` (data id 44122). It uses three
+split/model seeds (`42`, `123`, `2026`) and adds 0%, 25%, 50%, 75%, or 100% of
+the original feature count as independent standard-Gaussian columns.
+
+The extension preserves the original scripts and result files. Its default
+experiment compares the same MLP and RandomForest configurations used above;
+HistGB remains available as an optional model.
+
+```bash
+# Fast check: 1 dataset x 1 seed x 0% noise x 2 models
+python cross_dataset_validation.py --datasets eye_movements --seeds 42 \
+  --models MLP RandomForest --smoke
+
+# Full experiment: 2 datasets x 3 seeds x 5 noise levels x 2 models
+python cross_dataset_validation.py --datasets eye_movements pol \
+  --seeds 42 123 2026 --models MLP RandomForest --resume
+
+# Recreate figures from the saved real results without retraining
+python plot_cross_dataset.py
+
+# Tests
+python -m pytest -q
+```
+
+Use `--resume` to skip completed conditions or `--overwrite` to explicitly
+replace the extension CSVs. The 70%/9%/21% split is stratified. A
+`QuantileTransformer(output_distribution="normal")` is fit on training rows
+only. Train, validation, and test noise matrices use independent deterministic
+random streams; every model/noise condition is fit from scratch.
+
+Mean raw test accuracy over three seeds:
+
+| Dataset | Model | 0% noise | 100% noise | Change |
+| --- | --- | ---: | ---: | ---: |
+| eye_movements | MLP | 0.581 | 0.554 | -0.027 |
+| eye_movements | RandomForest | 0.637 | 0.603 | -0.035 |
+| pol | MLP | 0.927 | 0.885 | -0.042 |
+| pol | RandomForest | 0.982 | 0.968 | -0.014 |
+
+`pol` follows the paper's aggregate observation: the MLP loses more accuracy
+than RandomForest. `eye_movements` does not: RandomForest has the larger mean
+drop, while the MLP change varies substantially across seeds. These mixed
+results support reporting dataset dependence rather than claiming universal
+robustness. Raw accuracy here must not be equated with Figure 5(b)'s normalized
+cross-dataset score.
+
+Extension artifacts:
+
+- `results/cross_dataset_details.csv`: all 60 fitted conditions;
+- `results/cross_dataset_summary.csv`: means, sample standard deviations, and
+  changes from each matching 0% baseline;
+- `figures/cross_dataset_eye_movements.png` and
+  `figures/cross_dataset_pol.png`: raw accuracy curves;
+- `figures/cross_dataset_accuracy_delta.png`: baseline-relative comparison;
+- `REPRODUCTION_EXTENSION_NOTES.md`: methods, exact results, limitations, and
+  report-ready observations.
+
 ## Own contributions vs. reused code
 
 - All code in this directory was written for this reproduction. It uses
